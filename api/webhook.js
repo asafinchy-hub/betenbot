@@ -687,6 +687,11 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: "Beten Melea Bot is running" });
     }
     const body = req.body;
+
+    if (process.env.BOT_ACTIVE === "false") {
+      return res.status(200).json({ paused: true });
+    }
+
     if (body?.typeWebhook !== "incomingMessageReceived") {
       return res.status(200).json({ skipped: true });
     }
