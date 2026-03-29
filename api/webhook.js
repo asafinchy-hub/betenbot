@@ -2,7 +2,7 @@ async function sendMessage(chatId, text) {
   const instance = process.env.GREEN_API_INSTANCE;
   const token = process.env.GREEN_API_TOKEN;
 
-  // 🔥 תיקון השרת שלך (7103)
+  // 🔥 השרת שלך (7103)
   const url = `https://7103.api.greenapi.com/waInstance${instance}/sendMessage/${token}`;
 
   try {
@@ -12,8 +12,9 @@ async function sendMessage(chatId, text) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        chatId,
+        chatId: chatId,
         message: text,
+        quotedMessageId: "",
       }),
     });
 
@@ -36,7 +37,7 @@ export default async function handler(req, res) {
 
     const typeWebhook = req.body?.typeWebhook;
 
-    // מתעלמים מהודעות יוצאות
+    // ❌ מתעלמים מהודעות יוצאות
     if (
       typeWebhook === "outgoingMessageReceived" ||
       typeWebhook === "outgoingAPIMessageReceived" ||
