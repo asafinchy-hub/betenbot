@@ -1,15 +1,28 @@
 async function sendMessage(chatId, text) {
   const instance = process.env.GREEN_API_INSTANCE;
   const token = process.env.GREEN_API_TOKEN;
+
   const url = `https://api.green-api.com/waInstance${instance}/sendMessage/${token}`;
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chatId, message: text }),
-  });
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chatId,
+        message: text,
+      }),
+    });
 
-  return resp.json();
+    const responseText = await resp.text();
+    console.log("Green API response:", responseText);
+
+    return responseText;
+  } catch (err) {
+    console.error("Send message error:", err);
+  }
 }
 
 export default async function handler(req, res) {
@@ -22,6 +35,7 @@ export default async function handler(req, res) {
 
     const typeWebhook = req.body?.typeWebhook;
 
+    // מתעלמים מהודעות יוצאות
     if (
       typeWebhook === "outgoingMessageReceived" ||
       typeWebhook === "outgoingAPIMessageReceived" ||
@@ -41,6 +55,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
+    // 🔥 תשובה לבדיקה
     await sendMessage(chatId, "היי! זה עובד 🔥");
 
     return res.status(200).json({ success: true });
