@@ -1,32 +1,3 @@
-async function sendMessage(chatId, text) {
-  const instance = process.env.GREEN_API_INSTANCE;
-  const token = process.env.GREEN_API_TOKEN;
-
-  // 🔥 השרת שלך (7103)
-  const url = `https://7103.api.greenapi.com/waInstance${instance}/sendMessage/${token}`;
-
-  try {
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        chatId: chatId,
-        message: text,
-        quotedMessageId: "",
-      }),
-    });
-
-    const responseText = await resp.text();
-    console.log("Green API response:", responseText);
-
-    return responseText;
-  } catch (err) {
-    console.error("Send message error:", err);
-  }
-}
-
 export default async function handler(req, res) {
   try {
     console.log("Incoming webhook:", JSON.stringify(req.body, null, 2));
@@ -35,34 +6,60 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: "ok" });
     }
 
-    const typeWebhook = req.body?.typeWebhook;
+    const body = req.body;
 
-    // ❌ מתעלמים מהודעות יוצאות
+    const typeWebhook = body.typeWebhook;
+
+    // ❌ מתעלמים מיוצא
     if (
       typeWebhook === "outgoingMessageReceived" ||
       typeWebhook === "outgoingAPIMessageReceived" ||
       typeWebhook === "outgoingMessageStatus"
     ) {
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ ignored: true });
     }
 
-    const message =
-      req.body?.messageData?.textMessageData?.textMessage ||
-      req.body?.messageData?.extendedTextMessageData?.text ||
-      "";
+    // 🔥 שולפים הודעה בצורה בטוחה
+    let message = "";
+    if (body.messageData?.textMessageData?.textMessage) {
+      message = body.messageData.textMessageData.textMessage;
+    } else if (body.messageData?.extendedTextMessageData?.text) {
+      message = body.messageData.extendedTextMessageData.text;
+    }
 
-    const chatId = req.body?.senderData?.chatId;
+    const chatId = body.senderData?.chatId;
+
+    console.log("Parsed:", { message, chatId, typeWebhook });
 
     if (!chatId || !message) {
-      return res.status(200).json({ success: true });
+      console.log("No message/chatId → skip");
+      return res.status(200).json({ skipped: true });
     }
 
-    // 🔥 תשובת בדיקה
-    await sendMessage(chatId, "היי! זה עובד 🔥");
+    // 🔥 שליחה
+    const instance = process.env.GREEN_API_INSTANCE;
+    const token = process.env.GREEN_API_TOKEN;
+
+    const url = `https://7103.api.greenapi.com/waInstance${instance}/sendMessage/${token}`;
+
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chatId: chatId,
+        message: "🔥 עובד!!!",
+      }),
+    });
+
+    const text = await resp.text();
+    console.log("Green response:", text);
 
     return res.status(200).json({ success: true });
+
   } catch (err) {
     console.error("Webhook error:", err);
-    return res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: err.message });
   }
 }
