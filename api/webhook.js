@@ -1,65 +1,49 @@
 export default async function handler(req, res) {
   try {
-    console.log("Incoming webhook:", JSON.stringify(req.body, null, 2));
-
-    if (req.method !== "POST") {
-      return res.status(200).json({ status: "ok" });
-    }
+    console.log("🔥 RAW BODY:", JSON.stringify(req.body, null, 2));
 
     const body = req.body;
 
-    const typeWebhook = body.typeWebhook;
+    const chatId = body?.senderData?.chatId;
 
-    // ❌ מתעלמים מיוצא
-    if (
-      typeWebhook === "outgoingMessageReceived" ||
-      typeWebhook === "outgoingAPIMessageReceived" ||
-      typeWebhook === "outgoingMessageStatus"
-    ) {
-      return res.status(200).json({ ignored: true });
-    }
+    const message =
+      body?.messageData?.textMessageData?.textMessage ||
+      body?.messageData?.extendedTextMessageData?.text ||
+      "";
 
-    // 🔥 שולפים הודעה בצורה בטוחה
-    let message = "";
-    if (body.messageData?.textMessageData?.textMessage) {
-      message = body.messageData.textMessageData.textMessage;
-    } else if (body.messageData?.extendedTextMessageData?.text) {
-      message = body.messageData.extendedTextMessageData.text;
-    }
+    console.log("👉 chatId:", chatId);
+    console.log("👉 message:", message);
 
-    const chatId = body.senderData?.chatId;
-
-    console.log("Parsed:", { message, chatId, typeWebhook });
-
+    // 🚨 אם אין הודעה או chatId - נצא
     if (!chatId || !message) {
-      console.log("No message/chatId → skip");
-      return res.status(200).json({ skipped: true });
+      console.log("❌ אין נתונים → יוצא");
+      return res.status(200).end();
     }
 
-    // 🔥 שליחה
+    // 🚀 שולחים תשובה תמיד
     const instance = process.env.GREEN_API_INSTANCE;
     const token = process.env.GREEN_API_TOKEN;
 
     const url = `https://7103.api.greenapi.com/waInstance${instance}/sendMessage/${token}`;
 
-    const resp = await fetch(url, {
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         chatId: chatId,
-        message: "🔥 עובד!!!",
+        message: "🔥 כןןן זה עובד!!!",
       }),
     });
 
-    const text = await resp.text();
-    console.log("Green response:", text);
+    const text = await response.text();
+    console.log("📩 Green API response:", text);
 
     return res.status(200).json({ success: true });
 
   } catch (err) {
-    console.error("Webhook error:", err);
+    console.error("💥 ERROR:", err);
     return res.status(500).json({ error: err.message });
   }
 }
