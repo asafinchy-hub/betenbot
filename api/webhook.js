@@ -2,6 +2,10 @@ export default async function handler(req, res) {
   try {
     console.log("🔥 RAW BODY:", JSON.stringify(req.body, null, 2));
 
+    if (req.method !== "POST") {
+      return res.status(200).json({ status: "ok" });
+    }
+
     const body = req.body;
 
     const chatId = body?.senderData?.chatId;
@@ -14,17 +18,22 @@ export default async function handler(req, res) {
     console.log("👉 chatId:", chatId);
     console.log("👉 message:", message);
 
-    // 🚨 אם אין הודעה או chatId - נצא
     if (!chatId || !message) {
-      console.log("❌ אין נתונים → יוצא");
-      return res.status(200).end();
+      console.log("❌ אין chatId או message → יוצא");
+      return res.status(200).json({ skipped: true });
     }
 
-    // 🚀 שולחים תשובה תמיד
+    // 🔥 ENV
     const instance = process.env.GREEN_API_INSTANCE;
     const token = process.env.GREEN_API_TOKEN;
 
-    const url = `https://7103.api.greenapi.com/waInstance${instance}/sendMessage/${token}`;
+    console.log("👉 instance:", instance);
+    console.log("👉 token exists:", !!token);
+
+    // 🔥 URL מתוקן (בלי 7103)
+    const url = `https://api.green-api.com/waInstance${instance}/sendMessage/${token}`;
+
+    console.log("👉 sending to:", url);
 
     const response = await fetch(url, {
       method: "POST",
