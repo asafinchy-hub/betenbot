@@ -2,7 +2,8 @@ async function sendMessage(chatId, text) {
   const instance = process.env.GREEN_API_INSTANCE;
   const token = process.env.GREEN_API_TOKEN;
 
-  const url = `https://api.green-api.com/waInstance${instance}/sendMessage/${token}`;
+  // 🔥 תיקון השרת שלך (7103)
+  const url = `https://7103.api.greenapi.com/waInstance${instance}/sendMessage/${token}`;
 
   try {
     const resp = await fetch(url, {
@@ -55,7 +56,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
-    // 🔥 תשובה לבדיקה
+    // 🔥 תשובת בדיקה
     await sendMessage(chatId, "היי! זה עובד 🔥");
 
     return res.status(200).json({ success: true });
