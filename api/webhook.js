@@ -55,7 +55,7 @@ function lookup(raw){if(!raw)return null;var c=raw.trim().toLowerCase().replace(
 const sessions = {};
 function getSession(chatId){
   if(!sessions[chatId]){
-    sessions[chatId]={state:'start',tour:null,pax:0,org:'',history:[],purchase_type:null,day:null,v_name:'',v_pax:'',v_date:''};
+    sessions[chatId]={state:'start',tour:null,pax:0,org:'',history:[],purchase_type:null,day:null,v_name:'',v_pax:'',v_date:'',confused:0};
   }
   return sessions[chatId];
 }
@@ -114,6 +114,7 @@ async function processMessage(chatId, text) {
   const isMain = msg === 'תפריט' || msg === 'menu' || isGreet;
   const isBack = msg === 'חזרה' || msg === 'back' || msg === '◀ חזרה לשלב הקודם';
 
+  s.confused = 0;
   if (isMain) { s.state = 'main'; s.history = []; return MSG.main; }
   if (isBack) {
     if (s.history.length > 0) { s.state = s.history.pop(); }
@@ -135,7 +136,7 @@ async function processMessage(chatId, text) {
   }
 
   if (s.state === 'other') { s.state = 'main'; return 'תודה 😊 הדר תחזור אליך בהקדם!'; }
-  if (s.state === 'job') { s.state = 'main'; return 'תודה 😊 הדר תחזור אליך בהקדם!'; }
+  if (s.state === 'job') { s.state = 'main'; return 'מעולה! 😊\n\nלהמשך התכתבות בנושא משרת ההדרכה, אנא פנה/י ישירות:\n\n👉 https://wa.me/972559378555'; }
 
   if (s.state === 'info') {
     if (msg === '1') { push('info_tlv'); return MSG.tlv; }
@@ -316,7 +317,14 @@ async function processMessage(chatId, text) {
   }
   if (s.state === 'prv_dates') { s.state = 'main'; return MSG.prv_done; }
 
-  return MSG.main;
+  // לא הבנתי
+  s.confused = (s.confused || 0) + 1;
+  if (s.confused >= 2) {
+    s.confused = 0;
+    s.state = 'main';
+    return 'לא הבנתי את פנייתך 🙏\nנחזור אלייך בהקדם! 👩\u200d💼✅';
+  }
+  return 'לא הבנתי את התשובה, אנא שלח/י שנית 🙏';
 }
 
 async function sendMessage(chatId, text) {
