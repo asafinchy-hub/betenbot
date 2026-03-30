@@ -114,8 +114,8 @@ async function processMessage(chatId, text) {
   const isMain = msg === 'תפריט' || msg === 'menu' || isGreet;
   const isBack = msg === 'חזרה' || msg === 'back' || msg === '◀ חזרה לשלב הקודם';
 
-  s.confused = 0;
-  if (isMain) { s.state = 'main'; s.history = []; return MSG.main; }
+  // איפוס confused רק על ברכות/תפריט
+  if (isMain || isBack || low.includes('הדר') || low.includes('נציג')) s.confused = 0;
   if (isBack) {
     if (s.history.length > 0) { s.state = s.history.pop(); }
     else { s.state = 'main'; }
@@ -132,7 +132,10 @@ async function processMessage(chatId, text) {
     if (msg === '4') { push('abroad'); return MSG.abroad; }
     if (msg === '5') { push('job'); return MSG.job; }
     if (msg === '6') { push('other'); return 'ספר/י לי 😊\n\nכתוב/י ואענה במהלך היום 🙂'; }
-    return MSG.main;
+    // fallback - כתב משהו לא מובן בתפריט ראשי
+    s.confused = (s.confused || 0) + 1;
+    if (s.confused >= 2) { s.confused = 0; s.state = 'main'; return 'לא הבנתי את פנייתך 🙏\nנחזור אלייך בהקדם! 👩\u200d💼✅'; }
+    return 'לא הבנתי את התשובה, אנא שלח/י שנית 🙏';
   }
 
   if (s.state === 'other') { s.state = 'main'; return 'תודה 😊 הדר תחזור אליך בהקדם!'; }
