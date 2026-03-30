@@ -130,7 +130,7 @@ async function processMessage(chatId, text) {
     if (msg === '2') { push('reg'); return 'לאיזה סיור תרצו להירשם? 🎉\n\n1. 🎫 סיור פתוח עם עוד משתתפים\n2. 🏢 סיור פרטי לחברות/ארגונים\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
     if (msg === '3') { push('existing'); return 'בשמחה! איך רכשת את הסיור?\n\n1. 📋 רכשתי באתר שלכם\n2. 🎟️ יש לי שובר ממועדון צרכנות\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
     if (msg === '4') { push('abroad'); return MSG.abroad; }
-    if (msg === '5') { push('job'); return MSG.job; }
+    if (msg === '5') { s.state = 'main'; return 'מעולה! 😊\n\nלפנייה בנושא משרת ההדרכה:\n\n👉 https://wa.me/972559378555'; }
     if (msg === '6') { push('other'); return 'ספר/י לי 😊\n\nכתוב/י ואענה במהלך היום 🙂'; }
     // fallback - כתב משהו לא מובן בתפריט ראשי
     s.confused = (s.confused || 0) + 1;
