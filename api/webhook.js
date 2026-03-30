@@ -4,6 +4,52 @@ const LINKS_TLV_THU = 'https://betenmelea.com/product/betenmelea-culinarytour-tl
 const LINKS_TLV_FRI = 'https://betenmelea.com/product/betenmelea-culinarytour-tlv/';
 const LINKS_LEV = 'https://betenmelea.com/product/levinsky-tour/';
 
+function isOffHours() {
+  const now = new Date();
+  // ישראל: UTC+2 בחורף, UTC+3 בקיץ - ניקח UTC+2 כבסיס ונבדוק DST
+  const utcHour = now.getUTCHours();
+  const utcMin = now.getUTCMinutes();
+  const utcDay = now.getUTCDay(); // 0=ראשון, 5=שישי, 6=שבת
+
+  // חישוב שעון ישראל (IST = UTC+2, IDST = UTC+3)
+  // בדיקת שעון קיץ: מרץ-אוקטובר בערך
+  const month = now.getUTCMonth(); // 0-11
+  const isDST = month >= 2 && month <= 9; // מרץ-אוקטובר (קירוב)
+  const offset = isDST ? 3 : 2;
+  
+  let ilHour = utcHour + offset;
+  let ilDay = utcDay;
+  if (ilHour >= 24) { ilHour -= 24; ilDay = (ilDay + 1) % 7; }
+  
+  const ilMin = utcMin;
+  const timeVal = ilHour * 60 + ilMin;
+
+  // שבת = סגור לגמרי
+  if (ilDay === 6) return true;
+
+  // ראשון-חמישי: 9:00-18:00
+  if (ilDay >= 0 && ilDay <= 4) {
+    return timeVal < 9*60 || timeVal >= 18*60;
+  }
+
+  // שישי: 9:00-13:00
+  if (ilDay === 5) {
+    return timeVal < 9*60 || timeVal >= 13*60;
+  }
+
+  return true;
+}
+
+const CLOSED_MSG = `היי 🙂 תודה שפנית ל״בטן מלאה״ 💛
+המשרד שלנו סגור כרגע, אבל אל דאגה – נחזור אלייך ברגע שנפתח 🙏
+בינתיים נשמח שתכתוב לנו כאן את הבקשה שלך ואת שמך המלא, ונחזור אלייך בהקדם האפשרי 📲✨
+
+שעות הפעילות שלנו:
+ראשון–חמישי 9:00–18:00 שישי 9:00–13:00
+
+מאחלים לך יום מקסים 💛`;
+
+
 function lookup(raw){if(!raw)return null;var c=raw.trim().toLowerCase().replace(/\.0$/,'');return CODES[c]||null;}
 
 const sessions = {};
@@ -18,7 +64,7 @@ const NAV = ['◀ חזרה לשלב הקודם','🏠 תפריט ראשי'];
 
 const MSG = {
   agent: 'הדר תחזור אליך בהקדם! 👩\u200d💼✅',
-  main: 'היי 👋 אני הדר, מנהלת המשרד של בטן מלאה 🍽️\nאיך אוכל לעזור לך?\n\n(בחר/י את הספרה המבוקשת)\n\n1. לקבל מידע על סיור קולינרי🍔\n2. אני רוצה להירשם לסיור📆\n3. יש לי הזמנה קיימת ורוצה לעדכן🖊\n4. מפות המלצות / סיור עצמאי בחו"ל✈️\n5. משרת הדרכה אצלנו🧭\n6. אחר💡',
+  main: 'היי 👋 אני הדר, מנהלת המשרד של בטן מלאה 🍽️\nאיך אוכל לעזור לך?\n\n(בחר/י את הספרה המבוקשת)\n\n1. לקבל מידע על סיור קולינרי\n2. אני רוצה להירשם לסיור\n3. יש לי הזמנה קיימת ורוצה לעדכן\n4. מפות המלצות / סיור עצמאי בחו"ל\n5. משרת הדרכה אצלכם\n6. אחר',
   info: 'איזה מהסיורים שלנו מעניין אותך? 🗺️\n\n1. 🔥 הסיור המושחת במרכז ת"א\n2. 🌍 הסיור העולמי בלוינסקי ✡️\n3. 🏢 סיור פרטי לחברות וארגונים\n4. 🤔 עדיין לא החלטתי\n\n◀ חזרה לתפריט ראשי - כתב/י תפריט',
   tlv: 'הסיור המושחת במרכז ת"א 🔥\n\nהראשון והיחיד מסוגו בישראל! 🥇\nסיור אוכל רחוב משוגע, משביע ומלא אווירה.\nאפילו תיכנסו לטעום מנה ממסעדת שף יוקרתית!\n\nמה הוא כולל?\n🍔 שפע טעימות - מלוחים, מתוקים ומשקאות\n🍷 טעימת אלכוהול\n🧩 חידות קלילות ומפתיעות\n✨ סיפורים מרתקים\n\nמתאים לצמחוניים, טבעוניים, הריוניות\nלא מתאים לצליאקים/רגישים לגלוטן\n\nחמישי 17:00 ושישי 11:00\n▶ instagram.com/reel/C9yqI-nI56T\n\n1. 🛒 אני רוצה לרכוש!\n2. ❓ יש לי שאלות\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט',
   lev: 'הסיור העולמי בלוינסקי ופארק המסילה 🌍\n\nסיור אוכל רחוב עולמי באזור הכי אותנטי שיש!\nכשר, משביע, כיפי וטעים בטירוף! ✡️\n\nמה הוא כולל?\n🍢 שפע טעימות\n🍷 טעימת אלכוהול\n🧠 חידות קלילות\n📖 סיפורים מרתקים\n\nמתאים לצמחוניים, טבעוניים, הריוניות\nלא מתאים לצליאקים/רגישים לגלוטן\n\nשישי 11:00 בלבד\n▶ instagram.com/reel/DDjFYnXIC9A\n\n1. 🛒 אני רוצה לרכוש!\n2. ❓ יש לי שאלות\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט',
@@ -49,6 +95,17 @@ const MSG = {
 
 async function processMessage(chatId, text) {
   const s = getSession(chatId);
+
+  // בדיקת שעות פעילות
+  if (isOffHours()) {
+    // שלח הודעה רק פעם אחת (לא כל הודעה)
+    const now = Date.now();
+    if (!s.lastClosed || now - s.lastClosed > 3600000) {
+      s.lastClosed = now;
+      return CLOSED_MSG;
+    }
+    return null; // שתיקה אחרי ההודעה הראשונה
+  }
   const msg = (text || '').trim();
   const low = msg.toLowerCase();
 
@@ -296,7 +353,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ skipped: true });
     }
     const reply = await processMessage(chatId, message);
-    await sendMessage(chatId, reply);
+    if (reply) await sendMessage(chatId, reply);
     return res.status(200).json({ success: true });
   } catch (err) {
     console.error("Bot error:", err);
