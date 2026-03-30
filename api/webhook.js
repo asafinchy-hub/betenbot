@@ -114,11 +114,25 @@ async function processMessage(chatId, text) {
   const isMain = msg === 'תפריט' || msg === 'menu' || isGreet;
   const isBack = msg === 'חזרה' || msg === 'back' || msg === '◀ חזרה לשלב הקודם';
 
-  // איפוס confused רק על ברכות/תפריט
-  if (isMain || isBack || low.includes('הדר') || low.includes('נציג')) s.confused = 0;
+  // לא מאפסים confused על ברכות
+  if (isBack || low.includes('הדר') || low.includes('נציג')) s.confused = 0;
   if (isBack) {
     if (s.history.length > 0) { s.state = s.history.pop(); }
     else { s.state = 'main'; }
+  }
+  if (isMain) {
+    if (s.confused >= 2) {
+      s.confused = 0;
+      s.state = 'main';
+      return 'לא הבנתי את פנייתך 🙏\nנחזור אלייך בהקדם! 👩\u200d💼✅';
+    }
+    s.confused = (s.confused || 0) + 1;
+    s.state = 'main';
+    s.history = [];
+    if (s.confused > 1) {
+      return 'לא הבנתי את התשובה, אנא שלח/י שנית 🙏\n\n' + MSG.main;
+    }
+    return MSG.main;
   }
   if (low.includes('הדר') || low.includes('נציג')) { s.state = 'main'; return MSG.agent; }
 
