@@ -55,7 +55,7 @@ function lookup(raw){if(!raw)return null;var c=raw.trim().toLowerCase().replace(
 const sessions = {};
 function getSession(chatId){
   if(!sessions[chatId]){
-    sessions[chatId]={state:'start',tour:null,pax:0,org:'',history:[],purchase_type:null,day:null,v_name:'',v_pax:'',v_date:'',confused:0};
+    sessions[chatId]={state:'start',tour:null,pax:0,org:'',history:[],purchase_type:null,day:null,v_name:'',v_pax:'',v_date:'',confused:0,menuSent:false,paused:false};
   }
   return sessions[chatId];
 }
@@ -64,7 +64,7 @@ const NAV = ['◀ חזרה לשלב הקודם','🏠 תפריט ראשי'];
 
 const MSG = {
   agent: 'הדר תחזור אליך בהקדם! 👩\u200d💼✅',
-  main: 'היי 👋 אני הדר, מנהלת המשרד של בטן מלאה 🍽️\nאיך אוכל לעזור לך?\n\n(בחר/י את הספרה המבוקשת)\n\n1. לקבל מידע על סיור קולינרי\n2. אני רוצה להירשם לסיור\n3. יש לי הזמנה קיימת ורוצה לעדכן\n4. מפות המלצות / סיור עצמאי בחו"ל\n5. משרת הדרכה אצלכם\n6. אחר',
+  main: 'היי 👋 אני הדר, מנהלת המשרד של בטן מלאה 🍽️\nאיך אוכל לעזור לך?\n\n(בחר/י את הספרה המבוקשת)\n\n1. לקבל מידע על סיור קולינרי\n2. אני רוצה להירשם לסיור\n3. יש לי הזמנה קיימת ורוצה לעדכן\n4. מפות המלצות / סיור עצמאי בחו"ל\n5. משרת הדרכה אצלכם\n6. אחר – כתבו לנו חופשי מה אתם צריכים',
   info: 'איזה מהסיורים שלנו מעניין אותך? 🗺️\n\n1. 🔥 הסיור המושחת במרכז ת"א\n2. 🌍 הסיור העולמי בלוינסקי ✡️\n3. 🏢 סיור פרטי לחברות וארגונים\n4. 🤔 עדיין לא החלטתי\n\n◀ חזרה לתפריט ראשי - כתב/י תפריט',
   tlv: 'הסיור המושחת במרכז ת"א 🔥\n\nהראשון והיחיד מסוגו בישראל! 🥇\nסיור אוכל רחוב משוגע, משביע ומלא אווירה.\nאפילו תיכנסו לטעום מנה ממסעדת שף יוקרתית!\n\nמה הוא כולל?\n🍔 שפע טעימות - מלוחים, מתוקים ומשקאות\n🍷 טעימת אלכוהול\n🧩 חידות קלילות ומפתיעות\n✨ סיפורים מרתקים\n\nמתאים לצמחוניים, טבעוניים, הריוניות\nלא מתאים לצליאקים/רגישים לגלוטן\n\nחמישי 17:00 ושישי 11:00\n▶ instagram.com/reel/C9yqI-nI56T\n\n1. 🛒 אני רוצה לרכוש!\n2. ❓ יש לי שאלות\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט',
   lev: 'הסיור העולמי בלוינסקי ופארק המסילה 🌍\n\nסיור אוכל רחוב עולמי באזור הכי אותנטי שיש!\nכשר, משביע, כיפי וטעים בטירוף! ✡️\n\nמה הוא כולל?\n🍢 שפע טעימות\n🍷 טעימת אלכוהול\n🧠 חידות קלילות\n📖 סיפורים מרתקים\n\nמתאים לצמחוניים, טבעוניים, הריוניות\nלא מתאים לצליאקים/רגישים לגלוטן\n\nשישי 11:00 בלבד\n▶ instagram.com/reel/DDjFYnXIC9A\n\n1. 🛒 אני רוצה לרכוש!\n2. ❓ יש לי שאלות\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט',
@@ -96,6 +96,9 @@ const MSG = {
 async function processMessage(chatId, text) {
   const s = getSession(chatId);
 
+  // אם הבוט עצר לאחר "לא הבנתי" — שתוק עד שיאופס ידנית
+  if (s.paused) return null;
+
   // בדיקת שעות פעילות
   if (isOffHours()) {
     // שלח הודעה רק פעם אחת (לא כל הודעה)
@@ -120,112 +123,106 @@ async function processMessage(chatId, text) {
     if (s.history.length > 0) { s.state = s.history.pop(); }
     else { s.state = 'main'; }
   }
-  if (isMain) {
-    if (s.confused >= 2) {
-      s.confused = 0;
-      s.state = 'main';
-      return 'לא הבנתי את פנייתך 🙏\nנחזור אלייך בהקדם! 👩\u200d💼✅';
-    }
-    s.confused = (s.confused || 0) + 1;
+  if (isMain || s.state === 'start') {
+    s.confused = 0;
     s.state = 'main';
     s.history = [];
-    if (s.confused > 1) {
-      return 'לא הבנתי את התשובה, אנא שלח/י שנית 🙏\n\n' + MSG.main;
-    }
+    s.menuSent = true;
     return MSG.main;
   }
   if (low.includes('הדר') || low.includes('נציג')) { s.state = 'main'; return MSG.agent; }
 
   // ── state machine ──
   const push = (st) => { s.history.push(s.state); s.state = st; };
+  const ok = (reply) => { s.confused = 0; return reply; };
 
   if (s.state === 'start' || s.state === 'main') {
-    if (msg === '1') { push('info'); return MSG.info; }
-    if (msg === '2') { push('reg'); return 'לאיזה סיור תרצו להירשם? 🎉\n\n1. 🎫 סיור פתוח עם עוד משתתפים\n2. 🏢 סיור פרטי לחברות/ארגונים\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
-    if (msg === '3') { push('existing'); return 'בשמחה! איך רכשת את הסיור?\n\n1. 📋 רכשתי באתר שלכם\n2. 🎟️ יש לי שובר ממועדון צרכנות\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
-    if (msg === '4') { push('abroad'); return MSG.abroad; }
+    if (msg === '1') { s.confused=0; push('info'); return MSG.info; }
+    if (msg === '2') { s.confused=0; push('reg'); return 'לאיזה סיור תרצו להירשם? 🎉\n\n1. 🎫 סיור פתוח עם עוד משתתפים\n2. 🏢 סיור פרטי לחברות/ארגונים\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
+    if (msg === '3') { s.confused=0; push('existing'); return 'בשמחה! איך רכשת את הסיור?\n\n1. 📋 רכשתי באתר שלכם\n2. 🎟️ יש לי שובר ממועדון צרכנות\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
+    if (msg === '4') { s.confused=0; push('abroad'); return MSG.abroad; }
     if (msg === '5') { s.state = 'main'; return 'מעולה! 😊\n\nלפנייה בנושא משרת ההדרכה:\n\n👉 https://wa.me/972559378555'; }
-    if (msg === '6') { push('other'); return 'ספר/י לי 😊\n\nכתוב/י ואענה במהלך היום 🙂'; }
+    if (msg === '6') { s.confused=0; push('other'); return 'ספר/י לי 😊\n\nכתוב/י ואענה במהלך היום 🙂'; }
     // fallback - כתב משהו לא מובן בתפריט ראשי
     s.confused = (s.confused || 0) + 1;
-    if (s.confused >= 2) { s.confused = 0; s.state = 'main'; return 'לא הבנתי את פנייתך 🙏\nנחזור אלייך בהקדם! 👩\u200d💼✅'; }
-    return 'לא הבנתי את התשובה, אנא שלח/י שנית 🙏';
+    if (s.confused >= 2) { s.confused = 0; s.state = 'main'; s.paused = true; return 'לא הבנתי את פנייתך 🙏\nנחזור אלייך בהקדם! 👩\u200d💼✅'; }
+    return 'לא הבנתי את התשובה, אנא שלח/י שנית 🙏\n\n' + MSG.main;
   }
 
   if (s.state === 'other') { s.state = 'main'; return 'תודה 😊 הדר תחזור אליך בהקדם!'; }
   if (s.state === 'job') { s.state = 'main'; return 'מעולה! 😊\n\nלהמשך התכתבות בנושא משרת ההדרכה, אנא פנה/י ישירות:\n\n👉 https://wa.me/972559378555'; }
 
   if (s.state === 'info') {
-    if (msg === '1') { push('info_tlv'); return MSG.tlv; }
-    if (msg === '2') { push('info_lev'); return MSG.lev; }
-    if (msg === '3') { push('prv_intro'); return MSG.prv_intro; }
-    if (msg === '4') { push('consult'); return MSG.consult; }
+    if (msg === '1') { s.confused=0; push('info_tlv'); return MSG.tlv; }
+    if (msg === '2') { s.confused=0; push('info_lev'); return MSG.lev; }
+    if (msg === '3') { s.confused=0; push('prv_intro'); return MSG.prv_intro; }
+    if (msg === '4') { s.confused=0; push('consult'); return MSG.consult; }
     return MSG.info;
   }
 
   if (s.state === 'consult') {
-    if (msg === '1') { push('info_tlv'); return MSG.tlv; }
-    if (msg === '2') { push('info_lev'); return MSG.lev; }
-    if (msg === '3') { push('prv_intro'); return MSG.prv_intro; }
+    if (msg === '1') { s.confused=0; push('info_tlv'); return MSG.tlv; }
+    if (msg === '2') { s.confused=0; push('info_lev'); return MSG.lev; }
+    if (msg === '3') { s.confused=0; push('prv_intro'); return MSG.prv_intro; }
     return MSG.consult;
   }
 
   if (s.state === 'info_tlv') {
-    if (msg === '1') { push('purchase_tlv'); return MSG.pay_opts_tlv; }
-    if (msg === '2') { push('faq_tlv'); return MSG.faq_tlv; }
+    if (msg === '1') { s.confused=0; push('purchase_tlv'); return MSG.pay_opts_tlv; }
+    if (msg === '2') { s.confused=0; push('faq_tlv'); return MSG.faq_tlv; }
     return MSG.tlv;
   }
   if (s.state === 'info_lev') {
-    if (msg === '1') { push('purchase_lev'); return MSG.pay_opts_lev; }
-    if (msg === '2') { push('faq_lev'); return MSG.faq_lev; }
+    if (msg === '1') { s.confused=0; push('purchase_lev'); return MSG.pay_opts_lev; }
+    if (msg === '2') { s.confused=0; push('faq_lev'); return MSG.faq_lev; }
     return MSG.lev;
   }
 
   if (s.state === 'faq_tlv') {
-    if (msg === '1') { push('faq_tlv_kosher'); return MSG.faq_tlv_kosher; }
-    if (msg === '2') { push('faq_tlv_other'); return MSG.faq_tlv_other; }
-    if (msg === '3') { push('purchase_tlv'); return MSG.pay_opts_tlv; }
+    if (msg === '1') { s.confused=0; push('faq_tlv_kosher'); return MSG.faq_tlv_kosher; }
+    if (msg === '2') { s.confused=0; push('faq_tlv_other'); return MSG.faq_tlv_other; }
+    if (msg === '3') { s.confused=0; push('purchase_tlv'); return MSG.pay_opts_tlv; }
     return MSG.faq_tlv;
   }
   if (s.state === 'faq_tlv_kosher') {
-    if (msg === '1') { push('info_lev'); return MSG.lev; }
-    if (msg === '2') { push('purchase_tlv'); return MSG.pay_opts_tlv; }
+    if (msg === '1') { s.confused=0; push('info_lev'); return MSG.lev; }
+    if (msg === '2') { s.confused=0; push('purchase_tlv'); return MSG.pay_opts_tlv; }
     if (msg === '3') { s.state = 'main'; return MSG.agent; }
     return MSG.faq_tlv_kosher;
   }
   if (s.state === 'faq_tlv_other') {
     if (msg === '1') { s.state = 'main'; return MSG.agent; }
-    if (msg === '2') { push('purchase_tlv'); return MSG.pay_opts_tlv; }
+    if (msg === '2') { s.confused=0; push('purchase_tlv'); return MSG.pay_opts_tlv; }
     return MSG.faq_tlv_other;
   }
   if (s.state === 'faq_lev') {
-    if (msg === '1') { push('faq_lev_kosher'); return MSG.faq_lev_kosher; }
-    if (msg === '2') { push('faq_lev_other'); return MSG.faq_lev_other; }
-    if (msg === '3') { push('purchase_lev'); return MSG.pay_opts_lev; }
+    if (msg === '1') { s.confused=0; push('faq_lev_kosher'); return MSG.faq_lev_kosher; }
+    if (msg === '2') { s.confused=0; push('faq_lev_other'); return MSG.faq_lev_other; }
+    if (msg === '3') { s.confused=0; push('purchase_lev'); return MSG.pay_opts_lev; }
     return MSG.faq_lev;
   }
   if (s.state === 'faq_lev_kosher') {
-    if (msg === '1') { push('purchase_lev'); return MSG.pay_opts_lev; }
+    if (msg === '1') { s.confused=0; push('purchase_lev'); return MSG.pay_opts_lev; }
     if (msg === '2') { s.state = 'main'; return MSG.agent; }
     return MSG.faq_lev_kosher;
   }
   if (s.state === 'faq_lev_other') {
     if (msg === '1') { s.state = 'main'; return MSG.agent; }
-    if (msg === '2') { push('purchase_lev'); return MSG.pay_opts_lev; }
+    if (msg === '2') { s.confused=0; push('purchase_lev'); return MSG.pay_opts_lev; }
     return MSG.faq_lev_other;
   }
 
   if (s.state === 'purchase_tlv') {
     s.tour = 'tlv';
-    if (msg === '1') { push('pay_day'); return MSG.pay_day; }
-    if (msg === '2') { push('voucher_start'); return 'נהדר! 🎟️\n\nלמילוי פרטי ההזמנה:\n\nמה שמך המלא (שם פרטי + משפחה)?\n\n💬 לעזרה מנציג - כתב/י נציג\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
+    if (msg === '1') { s.confused=0; push('pay_day'); return MSG.pay_day; }
+    if (msg === '2') { s.confused=0; push('voucher_start'); return 'נהדר! 🎟️\n\nלמילוי פרטי ההזמנה:\n\nמה שמך המלא (שם פרטי + משפחה)?\n\n💬 לעזרה מנציג - כתב/י נציג\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
     if (msg === '3') { s.state = 'main'; return MSG.agent; }
     return MSG.pay_opts_tlv;
   }
   if (s.state === 'purchase_lev') {
     s.tour = 'lev';
     if (msg === '1') { s.state = 'main'; return 'הסיור בלוינסקי מתקיים בשישי בבוקר בלבד - 11:00 ✡️\n\nלרכישה ושריון מקום - היכנסו לדף הסיור:\n\n👉 ' + LINKS_LEV + '\n\nבדף ניתן לבחור את התאריך הרצוי ולשלם.'; }
-    if (msg === '2') { push('voucher_start'); return 'נהדר! 🎟️\n\nלמילוי פרטי ההזמנה:\n\nמה שמך המלא (שם פרטי + משפחה)?\n\n💬 לעזרה מנציג - כתב/י נציג\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
+    if (msg === '2') { s.confused=0; push('voucher_start'); return 'נהדר! 🎟️\n\nלמילוי פרטי ההזמנה:\n\nמה שמך המלא (שם פרטי + משפחה)?\n\n💬 לעזרה מנציג - כתב/י נציג\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
     if (msg === '3') { s.state = 'main'; return MSG.agent; }
     return MSG.pay_opts_lev;
   }
@@ -260,19 +257,19 @@ async function processMessage(chatId, text) {
   }
 
   if (s.state === 'reg') {
-    if (msg === '1') { push('reg_open'); return 'לאיזה סיור?\n\n1. 🔥 הסיור המושחת\n2. 🌍 הסיור בלוינסקי\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
-    if (msg === '2') { push('prv_intro'); return MSG.prv_intro; }
+    if (msg === '1') { s.confused=0; push('reg_open'); return 'לאיזה סיור?\n\n1. 🔥 הסיור המושחת\n2. 🌍 הסיור בלוינסקי\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
+    if (msg === '2') { s.confused=0; push('prv_intro'); return MSG.prv_intro; }
     return 'לאיזה סיור תרצו להירשם? 🎉\n\n1. 🎫 סיור פתוח עם עוד משתתפים\n2. 🏢 סיור פרטי לחברות/ארגונים\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט';
   }
   if (s.state === 'reg_open') {
-    if (msg === '1') { push('purchase_tlv'); return MSG.pay_opts_tlv; }
-    if (msg === '2') { push('purchase_lev'); return MSG.pay_opts_lev; }
+    if (msg === '1') { s.confused=0; push('purchase_tlv'); return MSG.pay_opts_tlv; }
+    if (msg === '2') { s.confused=0; push('purchase_lev'); return MSG.pay_opts_lev; }
     return 'לאיזה סיור?\n\n1. 🔥 הסיור המושחת\n2. 🌍 הסיור בלוינסקי\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט';
   }
 
   if (s.state === 'existing') {
-    if (msg === '1') { push('existing_site'); return 'מה תרצה/י לעדכן?\n\n1. 📅 לדחות / להזיז תאריך\n2. ✏️ לעדכן פרטים\n3. 💬 לדבר עם הדר\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
-    if (msg === '2') { push('existing_voucher'); return 'מה תרצה/י לעדכן?\n\n1. 📅 לדחות / להזיז תאריך\n2. ✏️ לעדכן פרטים\n3. 💬 לדבר עם הדר\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
+    if (msg === '1') { s.confused=0; push('existing_site'); return 'מה תרצה/י לעדכן?\n\n1. 📅 לדחות / להזיז תאריך\n2. ✏️ לעדכן פרטים\n3. 💬 לדבר עם הדר\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
+    if (msg === '2') { s.confused=0; push('existing_voucher'); return 'מה תרצה/י לעדכן?\n\n1. 📅 לדחות / להזיז תאריך\n2. ✏️ לעדכן פרטים\n3. 💬 לדבר עם הדר\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט'; }
     return 'בשמחה! איך רכשת את הסיור?\n\n1. 📋 רכשתי באתר שלכם\n2. 🎟️ יש לי שובר ממועדון צרכנות\n◀ חזרה - כתב/י חזרה | 🏠 תפריט - כתב/י תפריט';
   }
   if (s.state === 'existing_site' || s.state === 'existing_voucher') {
@@ -285,34 +282,34 @@ async function processMessage(chatId, text) {
   if (s.state === 'existing_update') { s.state = 'main'; return 'תודה! הדר תיצור קשר בהקדם 👩\u200d💼✅'; }
 
   if (s.state === 'abroad') {
-    if (msg === '1') { push('ab_maps'); return MSG.ab_maps; }
-    if (msg === '2') { push('ab_tours'); return MSG.ab_tours; }
-    if (msg === '3') { push('ab_hotels'); return MSG.ab_hotels; }
+    if (msg === '1') { s.confused=0; push('ab_maps'); return MSG.ab_maps; }
+    if (msg === '2') { s.confused=0; push('ab_tours'); return MSG.ab_tours; }
+    if (msg === '3') { s.confused=0; push('ab_hotels'); return MSG.ab_hotels; }
     if (msg === '4') { s.state = 'main'; return MSG.ab_maps + '\n\n---\n\n' + MSG.ab_tours + '\n\n---\n\n' + MSG.ab_hotels; }
     return MSG.abroad;
   }
   if (s.state === 'ab_maps') {
-    if (msg === '1') { push('ab_tours'); return MSG.ab_tours; }
-    if (msg === '2') { push('ab_hotels'); return MSG.ab_hotels; }
+    if (msg === '1') { s.confused=0; push('ab_tours'); return MSG.ab_tours; }
+    if (msg === '2') { s.confused=0; push('ab_hotels'); return MSG.ab_hotels; }
     if (msg === '3') { s.state = 'main'; return MSG.agent; }
     return MSG.ab_maps;
   }
   if (s.state === 'ab_tours') {
-    if (msg === '1') { push('ab_maps'); return MSG.ab_maps; }
-    if (msg === '2') { push('ab_hotels'); return MSG.ab_hotels; }
+    if (msg === '1') { s.confused=0; push('ab_maps'); return MSG.ab_maps; }
+    if (msg === '2') { s.confused=0; push('ab_hotels'); return MSG.ab_hotels; }
     if (msg === '3') { s.state = 'main'; return MSG.agent; }
     return MSG.ab_tours;
   }
   if (s.state === 'ab_hotels') {
-    if (msg === '1') { push('ab_maps'); return MSG.ab_maps; }
-    if (msg === '2') { push('ab_tours'); return MSG.ab_tours; }
+    if (msg === '1') { s.confused=0; push('ab_maps'); return MSG.ab_maps; }
+    if (msg === '2') { s.confused=0; push('ab_tours'); return MSG.ab_tours; }
     if (msg === '3') { s.state = 'main'; return MSG.agent; }
     return MSG.ab_hotels;
   }
 
   if (s.state === 'prv_intro') {
-    if (msg === '1') { push('prv_kosher_yes'); return MSG.prv_kosher_yes; }
-    if (msg === '2') { push('prv_no_pref'); return MSG.prv_no_pref; }
+    if (msg === '1') { s.confused=0; push('prv_kosher_yes'); return MSG.prv_kosher_yes; }
+    if (msg === '2') { s.confused=0; push('prv_no_pref'); return MSG.prv_no_pref; }
     return MSG.prv_intro;
   }
   if (s.state === 'prv_kosher_yes') {
@@ -334,11 +331,17 @@ async function processMessage(chatId, text) {
   }
   if (s.state === 'prv_dates') { s.state = 'main'; return MSG.prv_done; }
 
-  // לא הבנתי
+  // לא הבנתי - fallback (רק אחרי שהתפריט נשלח)
+  if (!s.menuSent) {
+    s.menuSent = true;
+    s.state = 'main';
+    return MSG.main;
+  }
   s.confused = (s.confused || 0) + 1;
   if (s.confused >= 2) {
     s.confused = 0;
     s.state = 'main';
+    s.paused = true;
     return 'לא הבנתי את פנייתך 🙏\nנחזור אלייך בהקדם! 👩\u200d💼✅';
   }
   return 'לא הבנתי את התשובה, אנא שלח/י שנית 🙏';
