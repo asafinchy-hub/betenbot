@@ -29,23 +29,29 @@ function getSession(id){
   return sessions[id];
 }
 
-// בנה הודעה עם אפשרויות ממוספרות + חזרה/תפריט
-function menu(text, opts, hasBack=true, backState=null) {
-  let all = [...opts];
-  let backNum = null, mainNum = null;
+// ── בניית הודעה אינטראקטיבית ──
+// מחזיר אובייקט { type:'buttons'|'list', text, items:[{id,label}] }
+// עד 3 אפשרויות → כפתורים, מעל 3 → list menu
+function menu(text, opts, hasBack=true) {
+  const all = [...opts];
   if(hasBack){
-    backNum = all.length + 1;
-    mainNum = all.length + 2;
     all.push('חזרה לשלב הקודם ◀');
     all.push('חזרה לתפריט הראשי 🏠');
   }
-  const numbered = all.map((o,i) => (i+1)+'. '+o).join('\n');
-  return text + '\n\n' + numbered;
+  const items = all.map((label, i) => ({ id: String(i+1), label }));
+  return items.length <= 3
+    ? { type: 'buttons', text, items }
+    : { type: 'list',    text, items };
+}
+
+// הודעת קלט חופשי עם כפתורי ניווט בלבד
+function navMsg(text, extraLabels=[]) {
+  return menu(text, extraLabels, true);
 }
 
 const MAIN_MSG = menu(
-  'היי 👋 אני הדר, מנהלת המשרד של בטן מלאה 🍽️\nאיך אוכל לעזור לך?\n\n(בחר/י את הספרה המבוקשת)',
-  ['לקבל מידע על סיור קולינרי','אני רוצה להירשם לסיור','יש לי הזמנה קיימת ורוצה לעדכן','מפות המלצות / סיור עצמאי בחו\"ל','משרת הדרכה אצלכם','אחר – כתבו לנו חופשי מה אתם צריכים'],
+  'היי 👋 אני הדר, מנהלת המשרד של בטן מלאה 🍽️\nאיך אוכל לעזור לך?',
+  ['לקבל מידע על סיור קולינרי','אני רוצה להירשם לסיור','יש לי הזמנה קיימת ורוצה לעדכן','מפות המלצות / סיור עצמאי בחו"ל','משרת הדרכה אצלכם','אחר – כתבו לנו חופשי מה אתם צריכים'],
   false
 );
 
@@ -75,27 +81,34 @@ async function processMessage(chatId, text) {
   };
   const goMain = ()=>{s.state='main';s.history=[];s.confused=0;};
 
+  // ── עמוד סיום (קישור + כפתור חזרה לתפריט) ──
+  if(s.state==='end_link'){
+    goMain(); return MAIN_MSG;
+  }
+
   // ── state machine ──
-  let opts, total, backN, mainN, reply;
 
   // ─────────────────────────────────────────
   if(s.state==='main'){
-    opts=['לקבל מידע על סיור קולינרי','אני רוצה להירשם לסיור','יש לי הזמנה קיימת ורוצה לעדכן','מפות המלצות / סיור עצמאי בחו\"ל','משרת הדרכה אצלכם','אחר – כתבו לנו חופשי מה אתם צריכים'];
-    total=opts.length;
+    const total=6;
     if(n>=1&&n<=total){
       s.confused=0;
       if(n===1){push('info');return sendInfo();}
       if(n===2){push('reg');return sendReg();}
       if(n===3){push('existing');return sendExisting();}
       if(n===4){push('abroad');return sendAbroad();}
-      if(n===5){s.state='main';return 'מעולה! 😊\n\nלפנייה בנושא משרת ההדרכה:\n\n👉 https://wa.me/972559378555\n\n1. חזרה לתפריט הראשי 🏠';}
-      if(n===6){push('other');return 'ספר/י לי 😊\n\nכתוב/י ואענה במהלך היום 🙂\n\n1. חזרה לתפריט הראשי 🏠';}
+      if(n===5){
+        s.state='end_link';
+        return menu('מעולה! 😊\n\nלפנייה בנושא משרת ההדרכה:\n\n👉 https://wa.me/972559378555',['חזרה לתפריט הראשי 🏠'],false);
+      }
+      if(n===6){push('other');return navMsg('ספר/י לי 😊\n\nכתוב/י ואענה במהלך היום 🙂');}
     }
     return handleConfused(s, MAIN_MSG);
   }
 
   if(s.state==='other'){
-    if(n===1){goMain();return MAIN_MSG;}
+    if(n===1){goBack();return restate(s);}
+    if(n===2){goMain();return MAIN_MSG;}
     s.state='main';s.paused=true;return 'תודה 😊 הדר תחזור אליך בהקדם!';
   }
 
@@ -147,13 +160,13 @@ async function processMessage(chatId, text) {
   if(s.state==='faq_tlv_kosher'){
     if(n===1){s.confused=0;push('info_lev');return sendLev();}
     if(n===2){s.confused=0;push('purchase_tlv');return sendPayTlv();}
-    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩\u200d💼✅';}
+    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩‍💼✅';}
     if(n===4){goBack();return restate(s);}
     if(n===5){goMain();return MAIN_MSG;}
     return handleConfused(s, sendFaqTlvKosher());
   }
   if(s.state==='faq_tlv_other'){
-    if(n===1){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩\u200d💼✅';}
+    if(n===1){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩‍💼✅';}
     if(n===2){s.confused=0;push('purchase_tlv');return sendPayTlv();}
     if(n===3){goBack();return restate(s);}
     if(n===4){goMain();return MAIN_MSG;}
@@ -169,13 +182,13 @@ async function processMessage(chatId, text) {
   }
   if(s.state==='faq_lev_kosher'){
     if(n===1){s.confused=0;push('purchase_lev');return sendPayLev();}
-    if(n===2){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩\u200d💼✅';}
+    if(n===2){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩‍💼✅';}
     if(n===3){goBack();return restate(s);}
     if(n===4){goMain();return MAIN_MSG;}
     return handleConfused(s, sendFaqLevKosher());
   }
   if(s.state==='faq_lev_other'){
-    if(n===1){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩\u200d💼✅';}
+    if(n===1){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩‍💼✅';}
     if(n===2){s.confused=0;push('purchase_lev');return sendPayLev();}
     if(n===3){goBack();return restate(s);}
     if(n===4){goMain();return MAIN_MSG;}
@@ -187,23 +200,32 @@ async function processMessage(chatId, text) {
     s.tour='tlv';
     if(n===1){s.confused=0;push('pay_day');return sendPayDay();}
     if(n===2){s.confused=0;push('voucher_start');return sendVoucherStart();}
-    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩\u200d💼✅';}
+    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩‍💼✅';}
     if(n===4){goBack();return restate(s);}
     if(n===5){goMain();return MAIN_MSG;}
     return handleConfused(s, sendPayTlv());
   }
   if(s.state==='purchase_lev'){
     s.tour='lev';
-    if(n===1){s.confused=0;s.state='main';return 'הסיור בלוינסקי מתקיים בשישי בבוקר בלבד - 11:00 ✡️\n\nלרכישה ושריון מקום:\n\n👉 '+LINKS_LEV+'\n\nבדף ניתן לבחור את התאריך הרצוי ולשלם.\n\n1. חזרה לתפריט הראשי 🏠';}
+    if(n===1){
+      s.confused=0;s.state='end_link';
+      return menu('הסיור בלוינסקי מתקיים בשישי בבוקר בלבד - 11:00 ✡️\n\nלרכישה ושריון מקום:\n\n👉 '+LINKS_LEV+'\n\nבדף ניתן לבחור את התאריך הרצוי ולשלם.',['חזרה לתפריט הראשי 🏠'],false);
+    }
     if(n===2){s.confused=0;push('voucher_start');return sendVoucherStart();}
-    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩\u200d💼✅';}
+    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩‍💼✅';}
     if(n===4){goBack();return restate(s);}
     if(n===5){goMain();return MAIN_MSG;}
     return handleConfused(s, sendPayLev());
   }
   if(s.state==='pay_day'){
-    if(n===1){s.confused=0;s.state='main';return 'מעולה! לרכישת הסיור המושחת ביום חמישי 🔥\n\n👉 '+LINKS_TLV_THU+'\n\n1. חזרה לתפריט הראשי 🏠';}
-    if(n===2){s.confused=0;s.state='main';return 'מעולה! לרכישת הסיור המושחת ביום שישי 🔥\n\n👉 '+LINKS_TLV_FRI+'\n\n1. חזרה לתפריט הראשי 🏠';}
+    if(n===1){
+      s.confused=0;s.state='end_link';
+      return menu('מעולה! לרכישת הסיור המושחת ביום חמישי 🔥\n\n👉 '+LINKS_TLV_THU,['חזרה לתפריט הראשי 🏠'],false);
+    }
+    if(n===2){
+      s.confused=0;s.state='end_link';
+      return menu('מעולה! לרכישת הסיור המושחת ביום שישי 🔥\n\n👉 '+LINKS_TLV_FRI,['חזרה לתפריט הראשי 🏠'],false);
+    }
     if(n===3){goBack();return restate(s);}
     if(n===4){goMain();return MAIN_MSG;}
     return handleConfused(s, sendPayDay());
@@ -211,7 +233,6 @@ async function processMessage(chatId, text) {
 
   // ── שובר ──
   if(s.state==='voucher_start'){
-    // מצפה לטקסט חופשי (שם) - לא מספר
     if(n===1){goBack();return restate(s);}
     if(n===2){goMain();return MAIN_MSG;}
     s.confused=0;s.v_name=msg;push('voucher_pax');return sendVoucherPax(s);
@@ -222,9 +243,9 @@ async function processMessage(chatId, text) {
     s.confused=0;s.v_pax=msg;push('voucher_date');return sendVoucherDate(s);
   }
   if(s.state==='voucher_date'){
-    if(msg==='דלג'||msg==='3'){s.confused=0;s.v_date='לא נבחר';push('voucher_codes');return sendVoucherCodes();}
-    if(msg==='4'){goBack();return restate(s);}
-    if(msg==='5'){goMain();return MAIN_MSG;}
+    if(msg==='2'){s.confused=0;s.v_date='לא נבחר';push('voucher_codes');return sendVoucherCodes();}
+    if(msg==='3'){goBack();return restate(s);}
+    if(msg==='4'){goMain();return MAIN_MSG;}
     s.confused=0;s.v_date=msg;push('voucher_codes');return sendVoucherCodes();
   }
   if(s.state==='voucher_codes'){
@@ -260,8 +281,8 @@ async function processMessage(chatId, text) {
   }
   if(s.state==='existing_site'||s.state==='existing_voucher'){
     if(n===1){s.confused=0;push('reschedule');return sendReschedule();}
-    if(n===2){s.confused=0;s.state='existing_update';return 'שלח/י שם + תאריך + מה לעדכן:\n\n1. חזרה לשלב הקודם ◀\n2. חזרה לתפריט הראשי 🏠';}
-    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩\u200d💼✅';}
+    if(n===2){s.confused=0;s.state='existing_update';return navMsg('שלח/י שם + תאריך + מה לעדכן:');}
+    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩‍💼✅';}
     if(n===4){goBack();return restate(s);}
     if(n===5){goMain();return MAIN_MSG;}
     return handleConfused(s, sendExistingOpts());
@@ -274,7 +295,7 @@ async function processMessage(chatId, text) {
   if(s.state==='existing_update'){
     if(n===1){goBack();return restate(s);}
     if(n===2){goMain();return MAIN_MSG;}
-    s.confused=0;s.state='main';s.paused=true;return 'תודה! הדר תיצור קשר בהקדם 👩\u200d💼✅';
+    s.confused=0;s.state='main';s.paused=true;return 'תודה! הדר תיצור קשר בהקדם 👩‍💼✅';
   }
 
   // ── חו"ל ──
@@ -282,7 +303,7 @@ async function processMessage(chatId, text) {
     if(n===1){s.confused=0;push('ab_maps');return sendAbMaps();}
     if(n===2){s.confused=0;push('ab_tours');return sendAbTours();}
     if(n===3){s.confused=0;push('ab_hotels');return sendAbHotels();}
-    if(n===4){s.confused=0;s.state='main';return sendAbMaps()+'\n\n---\n\n'+sendAbTours()+'\n\n---\n\n'+sendAbHotels();}
+    if(n===4){s.confused=0;s.state='main';return sendAbMaps();}
     if(n===5){goBack();return restate(s);}
     if(n===6){goMain();return MAIN_MSG;}
     return handleConfused(s, sendAbroad());
@@ -290,7 +311,7 @@ async function processMessage(chatId, text) {
   if(s.state==='ab_maps'){
     if(n===1){s.confused=0;push('ab_tours');return sendAbTours();}
     if(n===2){s.confused=0;push('ab_hotels');return sendAbHotels();}
-    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩\u200d💼✅';}
+    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩‍💼✅';}
     if(n===4){goBack();return restate(s);}
     if(n===5){goMain();return MAIN_MSG;}
     return handleConfused(s, sendAbMaps());
@@ -298,7 +319,7 @@ async function processMessage(chatId, text) {
   if(s.state==='ab_tours'){
     if(n===1){s.confused=0;push('ab_maps');return sendAbMaps();}
     if(n===2){s.confused=0;push('ab_hotels');return sendAbHotels();}
-    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩\u200d💼✅';}
+    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩‍💼✅';}
     if(n===4){goBack();return restate(s);}
     if(n===5){goMain();return MAIN_MSG;}
     return handleConfused(s, sendAbTours());
@@ -306,7 +327,7 @@ async function processMessage(chatId, text) {
   if(s.state==='ab_hotels'){
     if(n===1){s.confused=0;push('ab_maps');return sendAbMaps();}
     if(n===2){s.confused=0;push('ab_tours');return sendAbTours();}
-    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩\u200d💼✅';}
+    if(n===3){s.confused=0;s.state='main';s.paused=true;return 'הדר תחזור אליך בהקדם! 👩‍💼✅';}
     if(n===4){goBack();return restate(s);}
     if(n===5){goMain();return MAIN_MSG;}
     return handleConfused(s, sendAbHotels());
@@ -339,16 +360,23 @@ async function processMessage(chatId, text) {
     if(n===1){goBack();return restate(s);}
     if(n===2){goMain();return MAIN_MSG;}
     s.confused=0;s.org=msg;push('prv_pax');
-    return 'כמה משתתפים צפויים?\n\nכתבו מספר משוער:\n\n1. חזרה לשלב הקודם ◀\n2. חזרה לתפריט הראשי 🏠';
+    return navMsg('כמה משתתפים צפויים?\n\nכתבו מספר משוער:');
   }
   if(s.state==='prv_pax'){
     if(n===1&&msg.length<3){goBack();return restate(s);}
     if(n===2&&msg.length<3){goMain();return MAIN_MSG;}
     s.confused=0;s.prv_pax=msg;push('prv_dates');
-    const dt=s.tour==='lev'?'מועדים אפשריים - הסיור בלוינסקי 🌍\n\n🔹 ראשון עד חמישי (עדיף לא ראשון)\n🕐 12:00-14:00':s.tour==='tlv'?'מועדים אפשריים - הסיור המושחת 🔥\n\n🔹 שני עד חמישי\n🕐 11:30-14:30 או 17:00':'מועדים אפשריים 📅\n\n🔥 מושחת: שני-חמישי 11:30-14:30 או 17:00\n🌍 לוינסקי: ראשון-חמישי 12:00-14:00';
-    return dt+'\n\nכתבו תאריכים, או שלחו מספר 1 להמשך:\n\n1. המשך ללא תאריך ▶\n2. חזרה לשלב הקודם ◀\n3. חזרה לתפריט הראשי 🏠';
+    const dt=s.tour==='lev'
+      ?'מועדים אפשריים - הסיור בלוינסקי 🌍\n\n🔹 ראשון עד חמישי (עדיף לא ראשון)\n🕐 12:00-14:00'
+      :s.tour==='tlv'
+        ?'מועדים אפשריים - הסיור המושחת 🔥\n\n🔹 שני עד חמישי\n🕐 11:30-14:30 או 17:00'
+        :'מועדים אפשריים 📅\n\n🔥 מושחת: שני-חמישי 11:30-14:30 או 17:00\n🌍 לוינסקי: ראשון-חמישי 12:00-14:00';
+    return navMsg(dt+'\n\nכתבו תאריכים, או לחצו "המשך":',['המשך ללא תאריך ▶']);
   }
   if(s.state==='prv_dates'){
+    if(n===1){s.confused=0;s.state='main';s.paused=true;
+      return 'תודה! 🙏\n\nקיבלנו את כל הפרטים.\n\nהדר תחזור אליכם בהקדם עם הצעה מותאמת, כולל מחיר ואישור זמינות!';
+    }
     if(n===2){goBack();return restate(s);}
     if(n===3){goMain();return MAIN_MSG;}
     s.confused=0;s.state='main';s.paused=true;
@@ -358,15 +386,15 @@ async function processMessage(chatId, text) {
   return handleConfused(s, MAIN_MSG);
 }
 
-// ── פונקציות תוכן ──
+// ── עזר ──
 function handleConfused(s, fallback){
   s.confused=(s.confused||0)+1;
-  if(s.confused>=2){s.confused=0;s.state='main';s.paused=true;return 'לא הבנתי את פנייתך 🙏\nנחזור אלייך בהקדם! 👩\u200d💼✅';}
-  return 'לא הבנתי את בחירתך, אנא כתוב/י שנית 🙏';
+  if(s.confused>=2){s.confused=0;s.state='main';s.paused=true;return 'לא הבנתי את פנייתך 🙏\nנחזור אלייך בהקדם! 👩‍💼✅';}
+  return 'לא הבנתי את בחירתך, אנא נסה/י שנית 🙏';
 }
 
 function restate(s){
-  const m={
+  const map={
     main:()=>MAIN_MSG,
     info:sendInfo,consult:sendConsult,
     info_tlv:sendTlv,info_lev:sendLev,
@@ -382,89 +410,203 @@ function restate(s){
     abroad:sendAbroad,ab_maps:sendAbMaps,ab_tours:sendAbTours,ab_hotels:sendAbHotels,
     prv_intro:sendPrvIntro,prv_kosher_yes:sendPrvKosherYes,prv_no_pref:sendPrvNoPref,
   };
-  return m[s.state]?m[s.state]():MAIN_MSG;
+  return map[s.state]?map[s.state]():MAIN_MSG;
 }
 
-function m(text,opts,back=true){
-  const all=[...opts];
-  if(back){all.push('חזרה לשלב הקודם ◀');all.push('חזרה לתפריט הראשי 🏠');}
-  return text+'\n\n'+all.map((o,i)=>(i+1)+'. '+o).join('\n');
-}
+// ── פונקציות בניית הודעות ──
+function sendInfo(){return menu('איזה מהסיורים שלנו מעניין אותך? 🗺️',['🔥 הסיור המושחת במרכז ת"א','🌍 הסיור העולמי בלוינסקי ✡️','🏢 סיור פרטי לחברות וארגונים','🤔 עדיין לא החלטתי']);}
 
-function sendInfo(){return m('איזה מהסיורים שלנו מעניין אותך? 🗺️',['🔥 הסיור המושחת במרכז ת\"א','🌍 הסיור העולמי בלוינסקי ✡️','🏢 סיור פרטי לחברות וארגונים','🤔 עדיין לא החלטתי']);}
-function sendTlv(){return m('הסיור המושחת במרכז ת\"א 🔥\n\nהראשון והיחיד מסוגו בישראל! 🥇\nסיור אוכל רחוב משוגע, משביע ומלא אווירה.\nאפילו תיכנסו לטעום מנה ממסעדת שף יוקרתית!\n\nמה הוא כולל?\n🍔 שפע טעימות - מלוחים, מתוקים ומשקאות\n🍷 טעימת אלכוהול\n🧩 חידות קלילות ומפתיעות\n✨ סיפורים מרתקים\n\nמתאים לצמחוניים, טבעוניים, הריוניות\nלא מתאים לצליאקים/רגישים לגלוטן\n\nחמישי 17:00 ושישי 11:00\n▶ instagram.com/reel/C9yqI-nI56T',['🛒 אני רוצה לרכוש!','❓ יש לי שאלות']);}
-function sendLev(){return m('הסיור העולמי בלוינסקי ופארק המסילה 🌍\n\nסיור אוכל רחוב עולמי באזור הכי אותנטי שיש!\nכשר, משביע, כיפי וטעים בטירוף! ✡️\n\nמה הוא כולל?\n🍢 שפע טעימות\n🍷 טעימת אלכוהול\n🧠 חידות קלילות\n📖 סיפורים מרתקים\n\nמתאים לצמחוניים, טבעוניים, הריוניות\nלא מתאים לצליאקים/רגישים לגלוטן\n\nשישי 11:00 בלבד\n▶ instagram.com/reel/DDjFYnXIC9A',['🛒 אני רוצה לרכוש!','❓ יש לי שאלות']);}
-function sendConsult(){return m('מצוין - אספר לך על הסיורים שלנו 😊\n\n🔥 הסיור המושחת - אוכל רחוב מוגזם בלב העיר. לא כשר לחלוטין.\n🕐 חמישי 17:00 ושישי 11:00\n\n🌍 הסיור העולמי בלוינסקי - אווירה שוקית אותנטית. כשר לחלוטין ✡️\n🕐 שישי 11:00 בלבד',['🔥 הסיור המושחת - מידע נוסף','🌍 הסיור בלוינסקי - מידע נוסף','🏢 סיור פרטי לחברות וארגונים']);}
-function sendFaqTlv(){return m('כמובן! 😊\n\nהסיור שלנו מתאים ל:\n🌿 צמחוניים, טבעוניים ורגישים ללקטוז\n🤰 הריוניות\n⚠️ לא מתאים לצליאקים / רגישים לגלוטן\n\nחמישי 17:00 ושישי 11:00',['✡️ כשרות','❓ שאלה אחרת','🛒 לרכוש!']);}
-function sendFaqTlvKosher(){return m('כשרות - הסיור המושחת ✡️\n\nהסיור המושחת אינו כשר לחלוטין.\nאין חזיר, אין פירות ים, ואין בשר וחלב באותה המנה - אבל אין תעודות כשרות.\n\nאם כשרות עם תעודות חשובה לכם - הסיור העולמי בלוינסקי הוא כשר לחלוטין! ✡️',['🌍 ספר לי על הסיור בלוינסקי','🛒 לרכוש את הסיור המושחת!','💬 דבר/י עם הדר']);}
-function sendFaqTlvOther(){return m('לא מצאת תשובה? כנראה שתמצא אותה בתחתית דף הסיור באתר 😊\n\nbetenmelea.com/product/betenmelea-culinarytour-tlv\n\nעדיין לא מצאת? הדר תשמח לעזור!',['💬 דבר/י עם הדר','🛒 לרכוש!']);}
-function sendFaqLev(){return m('כמובן! 😊\n\nהסיור שלנו מתאים ל:\n🌿 צמחוניים, טבעוניים ורגישים ללקטוז\n🤰 הריוניות\n⚠️ לא מתאים לצליאקים / רגישים לגלוטן\n\nשישי 11:00 בלבד',['✡️ כשרות','❓ שאלה אחרת','🛒 לרכוש!']);}
-function sendFaqLevKosher(){return m('כשרות - הסיור העולמי בלוינסקי ✡️\n\nבסיור שלנו אין חזיר, אין פירות ים ואין בשר-חלב יחד!\n\nלרוב העסקים תעודת כשרות מטעם הרבנות / המועצה הדתית ת\"א.\n\nניתן להתייעץ עם הדר טרם ההזמנה 😊',['🛒 לרכוש!','💬 התייעץ/י עם הדר']);}
-function sendFaqLevOther(){return m('לא מצאת תשובה? כנראה שתמצא אותה בתחתית דף הסיור באתר 😊\n\nbetenmelea.com/product/levinsky-tour\n\nעדיין לא מצאת? הדר תשמח לעזור!',['💬 דבר/י עם הדר','🛒 לרכוש!']);}
-function sendPayTlv(){return m('מצוין! 🔥\n\nאיך תרצה/י לשלם?',['💳 ביט / אשראי','🎟️ יש לי שובר ממועדון צרכנות','💬 אשמח לעזרה מנציג']);}
-function sendPayLev(){return m('מצוין! 🌍\n\nאיך תרצה/י לשלם?',['💳 ביט / אשראי','🎟️ יש לי שובר ממועדון צרכנות','💬 אשמח לעזרה מנציג']);}
-function sendPayDay(){return m('הסיור המושחת מתקיים בשני ימים 🗓️\n\nבאיזה יום תרצה/י?',['🌙 חמישי בערב - 17:00','☀️ שישי בבוקר - 11:00']);}
-function sendVoucherStart(){return '🎟️ נהדר!\n\nמה שמך המלא (שם פרטי + משפחה)?\n\n1. חזרה לשלב הקודם ◀\n2. חזרה לתפריט הראשי 🏠';}
-function sendVoucherPax(s){return 'תודה '+s.v_name+'!\n\nכמה משתתפים?\n\nכתבו מספר:\n\n1. חזרה לשלב הקודם ◀\n2. חזרה לתפריט הראשי 🏠';}
+function sendTlv(){return menu(
+  'הסיור המושחת במרכז ת"א 🔥\n\nהראשון והיחיד מסוגו בישראל! 🥇\nסיור אוכל רחוב משוגע, משביע ומלא אווירה.\nאפילו תיכנסו לטעום מנה ממסעדת שף יוקרתית!\n\nמה הוא כולל?\n🍔 שפע טעימות - מלוחים, מתוקים ומשקאות\n🍷 טעימת אלכוהול\n🧩 חידות קלילות ומפתיעות\n✨ סיפורים מרתקים\n\nמתאים לצמחוניים, טבעוניים, הריוניות\nלא מתאים לצליאקים/רגישים לגלוטן\n\nחמישי 17:00 ושישי 11:00\n▶ instagram.com/reel/C9yqI-nI56T',
+  ['🛒 אני רוצה לרכוש!','❓ יש לי שאלות']
+);}
+
+function sendLev(){return menu(
+  'הסיור העולמי בלוינסקי ופארק המסילה 🌍\n\nסיור אוכל רחוב עולמי באזור הכי אותנטי שיש!\nכשר, משביע, כיפי וטעים בטירוף! ✡️\n\nמה הוא כולל?\n🍢 שפע טעימות\n🍷 טעימת אלכוהול\n🧠 חידות קלילות\n📖 סיפורים מרתקים\n\nמתאים לצמחוניים, טבעוניים, הריוניות\nלא מתאים לצליאקים/רגישים לגלוטן\n\nשישי 11:00 בלבד\n▶ instagram.com/reel/DDjFYnXIC9A',
+  ['🛒 אני רוצה לרכוש!','❓ יש לי שאלות']
+);}
+
+function sendConsult(){return menu(
+  'מצוין - אספר לך על הסיורים שלנו 😊\n\n🔥 הסיור המושחת - אוכל רחוב מוגזם בלב העיר. לא כשר לחלוטין.\n🕐 חמישי 17:00 ושישי 11:00\n\n🌍 הסיור העולמי בלוינסקי - אווירה שוקית אותנטית. כשר לחלוטין ✡️\n🕐 שישי 11:00 בלבד',
+  ['🔥 הסיור המושחת - מידע נוסף','🌍 הסיור בלוינסקי - מידע נוסף','🏢 סיור פרטי לחברות וארגונים']
+);}
+
+function sendFaqTlv(){return menu(
+  'כמובן! 😊\n\nהסיור שלנו מתאים ל:\n🌿 צמחוניים, טבעוניים ורגישים ללקטוז\n🤰 הריוניות\n⚠️ לא מתאים לצליאקים / רגישים לגלוטן\n\nחמישי 17:00 ושישי 11:00',
+  ['✡️ כשרות','❓ שאלה אחרת','🛒 לרכוש!']
+);}
+
+function sendFaqTlvKosher(){return menu(
+  'כשרות - הסיור המושחת ✡️\n\nהסיור המושחת אינו כשר לחלוטין.\nאין חזיר, אין פירות ים, ואין בשר וחלב באותה המנה - אבל אין תעודות כשרות.\n\nאם כשרות עם תעודות חשובה לכם - הסיור העולמי בלוינסקי הוא כשר לחלוטין! ✡️',
+  ['🌍 ספר לי על הסיור בלוינסקי','🛒 לרכוש את הסיור המושחת!','💬 דבר/י עם הדר']
+);}
+
+function sendFaqTlvOther(){return menu(
+  'לא מצאת תשובה? כנראה שתמצא אותה בתחתית דף הסיור באתר 😊\n\nbetenmelea.com/product/betenmelea-culinarytour-tlv\n\nעדיין לא מצאת? הדר תשמח לעזור!',
+  ['💬 דבר/י עם הדר','🛒 לרכוש!']
+);}
+
+function sendFaqLev(){return menu(
+  'כמובן! 😊\n\nהסיור שלנו מתאים ל:\n🌿 צמחוניים, טבעוניים ורגישים ללקטוז\n🤰 הריוניות\n⚠️ לא מתאים לצליאקים / רגישים לגלוטן\n\nשישי 11:00 בלבד',
+  ['✡️ כשרות','❓ שאלה אחרת','🛒 לרכוש!']
+);}
+
+function sendFaqLevKosher(){return menu(
+  'כשרות - הסיור העולמי בלוינסקי ✡️\n\nבסיור שלנו אין חזיר, אין פירות ים ואין בשר-חלב יחד!\n\nלרוב העסקים תעודת כשרות מטעם הרבנות / המועצה הדתית ת"א.\n\nניתן להתייעץ עם הדר טרם ההזמנה 😊',
+  ['🛒 לרכוש!','💬 התייעץ/י עם הדר']
+);}
+
+function sendFaqLevOther(){return menu(
+  'לא מצאת תשובה? כנראה שתמצא אותה בתחתית דף הסיור באתר 😊\n\nbetenmelea.com/product/levinsky-tour\n\nעדיין לא מצאת? הדר תשמח לעזור!',
+  ['💬 דבר/י עם הדר','🛒 לרכוש!']
+);}
+
+function sendPayTlv(){return menu('מצוין! 🔥\n\nאיך תרצה/י לשלם?',['💳 ביט / אשראי','🎟️ יש לי שובר ממועדון צרכנות','💬 אשמח לעזרה מנציג']);}
+function sendPayLev(){return menu('מצוין! 🌍\n\nאיך תרצה/י לשלם?',['💳 ביט / אשראי','🎟️ יש לי שובר ממועדון צרכנות','💬 אשמח לעזרה מנציג']);}
+function sendPayDay(){return menu('הסיור המושחת מתקיים בשני ימים 🗓️\n\nבאיזה יום תרצה/י?',['🌙 חמישי בערב - 17:00','☀️ שישי בבוקר - 11:00']);}
+
+function sendVoucherStart(){
+  return navMsg('🎟️ נהדר!\n\nמה שמך המלא (שם פרטי + משפחה)?');
+}
+function sendVoucherPax(s){
+  return navMsg('תודה '+s.v_name+'!\n\nכמה משתתפים?\n\nכתבו מספר:');
+}
 function sendVoucherDate(s){
   let t='לאיזה תאריך תרצו לשריין?\n\n';
   if(s.tour==='tlv')t+='📅 הסיור המושחת: חמישי 17:00 / שישי 11:00\n\n';
   else if(s.tour==='lev')t+='📅 הסיור בלוינסקי: שישי 11:00\n\n';
-  t+='כתבו תאריך, או לחצו 3 להמשך ללא תאריך:\n\n1. כתיבת תאריך\n2. המשך ללא תאריך ▶\n3. חזרה לשלב הקודם ◀\n4. חזרה לתפריט הראשי 🏠';
-  // שלב זה גמיש - מקבל טקסט כתאריך
-  return t.replace('1. כתיבת תאריך\n','');
+  t+='כתבו תאריך, או לחצו "דלג":';
+  return navMsg(t,['דלג ▶']);
 }
-function sendVoucherCodes(){return 'מצוין! עכשיו שלחו את מספרי השוברים 🎟️\n\n(ניתן לשלוח כמה שוברים אחד אחרי השני, או כולם בהודעה אחת)\n\n1. 💬 אשמח לעזרה של נציג\n2. חזרה לשלב הקודם ◀\n3. חזרה לתפריט הראשי 🏠';}
-function sendReg(){return m('לאיזה סיור תרצו להירשם? 🎉',['🎫 סיור פתוח עם עוד משתתפים','🏢 סיור פרטי לחברות/ארגונים']);}
-function sendRegOpen(){return m('לאיזה סיור?',['🔥 הסיור המושחת','🌍 הסיור בלוינסקי']);}
-function sendExisting(){return m('בשמחה! איך רכשת את הסיור?',['📋 רכשתי באתר שלכם','🎟️ יש לי שובר ממועדון צרכנות']);}
-function sendExistingOpts(){return m('מה תרצה/י לעדכן?',['📅 לדחות / להזיז תאריך','✏️ לעדכן פרטים','💬 לדבר עם הדר']);}
-function sendReschedule(){return 'דחיית תאריך 📅\n\n✅ פעם אחת, ללא עלות\n✅ עד 72 שעות לפני הסיור\n✅ תוך 3 חודשים\n\nשלח/י שם + תאריך מקורי + תאריך חדש:\n\n1. חזרה לשלב הקודם ◀\n2. חזרה לתפריט הראשי 🏠';}
-function sendAbroad(){return m('בטן מלאה - גם בחו\"ל! ✈️',['🗺️ מפות המלצות בגוגל','🎧 סיורים עצמאיים דיגיטליים','🏨 המלצות לינה','🗺️+🎧 הכל מעניין אותי!']);}
-function sendAbMaps(){return m('מפות המלצות בגוגל 🗺️\n\nעשרות ואף מאות המלצות לפי יעד!\n\nbetenmelea.com/betenmelea-culinary-maps',['🎧 סיורים עצמאיים','🏨 המלצות לינה','💬 שאלה נוספת']);}
-function sendAbTours(){return m('סיורים קולינריים עצמאיים 🎧\n\nדיגיטליים, בקצב שלכם, ללא מדריך.\n\nיעדים: 🇯🇵 טוקיו, 🇰🇷 סיאול, 🇭🇰 הונג קונג, 🇬🇷 אתונה, 🇵🇱 קרקוב\n\nbetenmelea.com/digitaltours',['🗺️ מפות המלצות','🏨 המלצות לינה','💬 שאלה נוספת']);}
-function sendAbHotels(){return m('המלצות לינה בחו\"ל 🏨\n\nהמלצות אישיות לבתי מלון ודירות - בחינם!\n\nbetenmelea.com/hotels-recommend/',['🗺️ מפות המלצות','🎧 סיורים עצמאיים','💬 שאלה נוספת']);}
-function sendPrvIntro(){return m('מעולה! 🏢✨\n\nסיור פרטי הוא חוויה מותאמת אישית לקבוצה שלכם!\n\nיש לנו שני סיורים:\n🔥 הסיור המושחת במרכז ת\"א\n🌍 הסיור העולמי בלוינסקי - ✡️ כשר\n\nהאם כשרות חשובה לכם ברמה של תעודות כשרות?',['✅ כן, תעודות כשרות חשובות לנו','🍽️ לא, אין לנו העדפה']);}
-function sendPrvKosherYes(){return m('מצוין! 😊\n\nבשני הסיורים אין חזיר, פירות ים, ובשר-חלב.\n\nבמידה ותהיה תחנה אחת בסיור ללא תעודת כשרות אבל האוכל בה כשר והיא סגורה בשבתות - זה בסדר?',['✅ כן, זה בסדר','❌ לא, חייבים תעודות בלבד']);}
-function sendPrvNoPref(){return m('מצוין! 😊\n\n🔥 הסיור המושחת - אוכל רחוב מוגזם. לא כשר.\n🌍 הסיור בלוינסקי - כשר עם תעודות!\n\nאיזה סיור מעניין אתכם יותר?',['🔥 הסיור המושחת','🌍 הסיור בלוינסקי','שניהם מעניינים']);}
-function sendPrvOrg(){return 'מאיזה ארגון/חברה אתם פונים?\nכתבו שם הארגון:\n\n1. חזרה לשלב הקודם ◀\n2. חזרה לתפריט הראשי 🏠';}
+function sendVoucherCodes(){
+  return menu('מצוין! עכשיו שלחו את מספרי השוברים 🎟️\n\n(ניתן לשלוח כמה שוברים - כולם בהודעה אחת)',['💬 אשמח לעזרה של נציג']);
+}
 
-async function sendMessage(chatId, text) {
+function sendReg(){return menu('לאיזה סיור תרצו להירשם? 🎉',['🎫 סיור פתוח עם עוד משתתפים','🏢 סיור פרטי לחברות/ארגונים']);}
+function sendRegOpen(){return menu('לאיזה סיור?',['🔥 הסיור המושחת','🌍 הסיור בלוינסקי']);}
+function sendExisting(){return menu('בשמחה! איך רכשת את הסיור?',['📋 רכשתי באתר שלכם','🎟️ יש לי שובר ממועדון צרכנות']);}
+function sendExistingOpts(){return menu('מה תרצה/י לעדכן?',['📅 לדחות / להזיז תאריך','✏️ לעדכן פרטים','💬 לדבר עם הדר']);}
+function sendReschedule(){
+  return navMsg('דחיית תאריך 📅\n\n✅ פעם אחת, ללא עלות\n✅ עד 72 שעות לפני הסיור\n✅ תוך 3 חודשים\n\nשלח/י שם + תאריך מקורי + תאריך חדש:');
+}
+function sendAbroad(){return menu('בטן מלאה - גם בחו"ל! ✈️',['🗺️ מפות המלצות בגוגל','🎧 סיורים עצמאיים דיגיטליים','🏨 המלצות לינה','🗺️+🎧 הכל מעניין אותי!']);}
+
+function sendAbMaps(){return menu(
+  'מפות המלצות בגוגל 🗺️\n\nעשרות ואף מאות המלצות לפי יעד!\n\nbetenmelea.com/betenmelea-culinary-maps',
+  ['🎧 סיורים עצמאיים','🏨 המלצות לינה','💬 שאלה נוספת']
+);}
+function sendAbTours(){return menu(
+  'סיורים קולינריים עצמאיים 🎧\n\nדיגיטליים, בקצב שלכם, ללא מדריך.\n\nיעדים: 🇯🇵 טוקיו, 🇰🇷 סיאול, 🇭🇰 הונג קונג, 🇬🇷 אתונה, 🇵🇱 קרקוב\n\nbetenmelea.com/digitaltours',
+  ['🗺️ מפות המלצות','🏨 המלצות לינה','💬 שאלה נוספת']
+);}
+function sendAbHotels(){return menu(
+  'המלצות לינה בחו"ל 🏨\n\nהמלצות אישיות לבתי מלון ודירות - בחינם!\n\nbetenmelea.com/hotels-recommend/',
+  ['🗺️ מפות המלצות','🎧 סיורים עצמאיים','💬 שאלה נוספת']
+);}
+
+function sendPrvIntro(){return menu(
+  'מעולה! 🏢✨\n\nסיור פרטי הוא חוויה מותאמת אישית לקבוצה שלכם!\n\nיש לנו שני סיורים:\n🔥 הסיור המושחת במרכז ת"א\n🌍 הסיור העולמי בלוינסקי - ✡️ כשר\n\nהאם כשרות חשובה לכם ברמה של תעודות כשרות?',
+  ['✅ כן, תעודות כשרות חשובות לנו','🍽️ לא, אין לנו העדפה']
+);}
+function sendPrvKosherYes(){return menu(
+  'מצוין! 😊\n\nבשני הסיורים אין חזיר, פירות ים, ובשר-חלב.\n\nבמידה ותהיה תחנה אחת בסיור ללא תעודת כשרות אבל האוכל בה כשר והיא סגורה בשבתות - זה בסדר?',
+  ['✅ כן, זה בסדר','❌ לא, חייבים תעודות בלבד']
+);}
+function sendPrvNoPref(){return menu(
+  'מצוין! 😊\n\n🔥 הסיור המושחת - אוכל רחוב מוגזם. לא כשר.\n🌍 הסיור בלוינסקי - כשר עם תעודות!\n\nאיזה סיור מעניין אתכם יותר?',
+  ['🔥 הסיור המושחת','🌍 הסיור בלוינסקי','שניהם מעניינים']
+);}
+function sendPrvOrg(){
+  return navMsg('מאיזה ארגון/חברה אתם פונים?\nכתבו שם הארגון:');
+}
+
+// ── שליחת הודעה דרך Green API ──
+async function sendMessage(chatId, msg) {
   const instance = process.env.GREEN_API_INSTANCE;
-  const token = process.env.GREEN_API_TOKEN;
-  const url = "https://api.green-api.com/waInstance" + instance + "/sendMessage/" + token;
-  await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chatId, message: text }),
-  });
+  const token    = process.env.GREEN_API_TOKEN;
+  const base     = `https://api.green-api.com/waInstance${instance}`;
+
+  // הודעת טקסט רגילה
+  if (typeof msg === 'string') {
+    await fetch(`${base}/sendMessage/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message: msg }),
+    });
+    return;
+  }
+
+  // כפתורים (עד 3 אפשרויות)
+  if (msg.type === 'buttons') {
+    await fetch(`${base}/sendButtons/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId,
+        message: msg.text,
+        footer: '',
+        buttons: msg.items.map(b => ({
+          buttonId: b.id,
+          buttonText: { displayText: b.label },
+        })),
+      }),
+    });
+    return;
+  }
+
+  // רשימה (4+ אפשרויות)
+  if (msg.type === 'list') {
+    await fetch(`${base}/sendListMessage/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId,
+        message: msg.text,
+        title: 'תפריט',
+        footer: '',
+        buttonText: 'בחרו אפשרות ▾',
+        sections: [{
+          title: 'אפשרויות',
+          rows: msg.items.map(b => ({ rowId: b.id, title: b.label })),
+        }],
+      }),
+    });
+    return;
+  }
 }
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.status(200).send("<h1>Beten Melea Bot ✅</h1>");
+    if (req.method !== 'POST') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send('<h1>Beten Melea Bot ✅</h1>');
     }
     const body = req.body;
-    if (process.env.BOT_ACTIVE === "false") {
+    if (process.env.BOT_ACTIVE === 'false') {
       return res.status(200).json({ paused: true });
     }
-    if (body?.typeWebhook !== "incomingMessageReceived") {
+    if (body?.typeWebhook !== 'incomingMessageReceived') {
       return res.status(200).json({ skipped: true });
     }
+
+    // תמיכה בטקסט, לחיצת כפתור ובחירה מרשימה
     const message =
       body?.messageData?.textMessageData?.textMessage ||
-      body?.messageData?.extendedTextMessageData?.text || "";
+      body?.messageData?.extendedTextMessageData?.text ||
+      body?.messageData?.buttonsResponseMessage?.selectedButtonId ||
+      body?.messageData?.listResponseMessage?.listResponseRow?.rowId ||
+      '';
+
     const chatId = body?.senderData?.chatId;
     if (!chatId || !message) {
       return res.status(200).json({ skipped: true });
     }
+
     const reply = await processMessage(chatId, message);
     if (reply) await sendMessage(chatId, reply);
     return res.status(200).json({ success: true });
   } catch (err) {
-    console.error("Bot error:", err);
-    return res.status(500).json({ error: "Server error" });
+    console.error('Bot error:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 }
